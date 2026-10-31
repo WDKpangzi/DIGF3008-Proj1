@@ -35,7 +35,7 @@ const places = [
 
 const $ = (id) => document.getElementById(id);
 const shakesPerStop = 3;
-const state = { city: -1, photo: 0, travelStep: 0, motionReady: false, motionAllowed: false, orientationAllowed: false, lastShake: 0, lastAccel: null, tiltBase: null, lastTilt: 0, touchX: null, toastTimer: null };
+const state = { city: -1, photo: 0, travelStep: 0, motionReady: false, motionAllowed: false, orientationAllowed: false, lastShake: 0, lastAccel: null, tiltBase: null, tiltLocked: false, lastTilt: 0, touchX: null, toastTimer: null };
 const mapCities = [...document.querySelectorAll('.map-city')];
 const routePath = $('routeProgress');
 const routeLength = routePath.getTotalLength();
@@ -104,12 +104,12 @@ function renderPhoto() {
   $('galleryFootnote').textContent = state.city === 0 && state.photo === 4 ? 'From the exhibition into everyday life' : 'A little moment, kept here';
 }
 function openPlace(index) {
-  state.city = index; state.photo = 0; state.tiltBase = null; updateMap(); renderPhoto();
+  state.city = index; state.photo = 0; state.tiltBase = null; state.tiltLocked = false; updateMap(); renderPhoto();
   setOverlay($('galleryOverlay'), true);
   if (state.city === 0) toast('Beijing holds two chapters. Keep turning to find the second.');
 }
 function finishJourney() { setOverlay($('galleryOverlay'), false); setTimeout(() => setOverlay($('endOverlay'), true), 260); }
-function closeGallery() { setOverlay($('galleryOverlay'), false); state.tiltBase = null; updateMap(); }
+function closeGallery() { setOverlay($('galleryOverlay'), false); state.tiltBase = null; state.tiltLocked = false; updateMap(); }
 function advancePhoto(direction=1) {
   if (state.city < 0) return;
   const place = places[state.city], target = state.photo + direction;
@@ -118,7 +118,7 @@ function advancePhoto(direction=1) {
     if (state.city === places.length-1) { finishJourney(); return; }
     closeGallery(); toast(`You have reached the end of ${place.name}. Shake ${shakesPerStop} times to continue.`); return;
   }
-  state.photo = target; state.tiltBase = null;
+  state.photo = target;
   const frame = $('photoFrame'); frame.classList.add('changing');
   setTimeout(() => { renderPhoto(); requestAnimationFrame(() => frame.classList.remove('changing')); }, 140);
 }
@@ -133,7 +133,7 @@ function advanceStep() {
   if (state.travelStep === 1) toast(`One small step toward ${places[state.city+1].name}.`);
 }
 function resetJourney(showIntro=true) {
-  state.city=-1; state.photo=0; state.travelStep=0; state.lastShake=0; state.lastAccel=null; state.tiltBase=null;
+  state.city=-1; state.photo=0; state.travelStep=0; state.lastShake=0; state.lastAccel=null; state.tiltBase=null; state.tiltLocked=false;
   setOverlay($('galleryOverlay'),false); setOverlay($('endOverlay'),false); updateMap();
   if (showIntro) setOverlay($('introOverlay'),true); else toast('The journey is ready to begin again.');
 }
@@ -168,11 +168,18 @@ function handleMotion(event) {
   if (magnitude != null && magnitude > threshold && now-state.lastShake>950) { state.lastShake=now; advanceStep(); }
 }
 function handleOrientation(event) {
-  if (!$('galleryOverlay').classList.contains('is-open') || event.beta == null) { state.tiltBase=null; return; }
-  const now=Date.now();
-  if (state.tiltBase == null) { state.tiltBase=event.beta; return; }
-  const delta=event.beta-state.tiltBase;
-  if (Math.abs(delta)>17 && now-state.lastTilt>850) { state.lastTilt=now; state.tiltBase=event.beta; advancePhoto(delta>0?1:-1); }
+  if (!$('galleryOverlay').classList.contains('is-open') || event.gamma == null) { state.tiltBase=null; state.tiltLocked=false; return; }
+  const angle = event.gamma;
+  if (state.tiltBase == null) { state.tiltBase=angle; return; }
+  const delta=angle-state.tiltBase, now=Date.now();
+  // One photo per deliberate side tilt. Return the phone near its starting angle to re-arm.
+  if (state.tiltLocked) {
+    if (Math.abs(delta)<5 && now-state.lastTilt>250) state.tiltLocked=false;
+    return;
+  }
+  if (Math.abs(delta)>12 && now-state.lastTilt>500) {
+    state.lastTilt=now; state.tiltLocked=true; advancePhoto(delta>0?1:-1);
+  }
 }
 
 $('startButton').addEventListener('click', async () => { await requestSensors(); beginJourney(); });
