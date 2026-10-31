@@ -112,8 +112,8 @@ function finishJourney() { setOverlay($('galleryOverlay'), false); setTimeout(()
 function closeGallery() { setOverlay($('galleryOverlay'), false); state.tiltBase = null; state.tiltLocked = false; updateMap(); }
 function advancePhoto(direction=1) {
   if (state.city < 0) return;
+  if (direction < 0) return;
   const place = places[state.city], target = state.photo + direction;
-  if (target < 0) { if (state.city > 0) toast('You are already at the first photo of this stop.'); return; }
   if (target >= place.photos.length) {
     if (state.city === places.length-1) { finishJourney(); return; }
     closeGallery(); toast(`You have reached the end of ${place.name}. Shake ${shakesPerStop} times to continue.`); return;
@@ -177,8 +177,8 @@ function handleOrientation(event) {
     if (Math.abs(delta)<5 && now-state.lastTilt>250) state.tiltLocked=false;
     return;
   }
-  if (Math.abs(delta)>12 && now-state.lastTilt>500) {
-    state.lastTilt=now; state.tiltLocked=true; advancePhoto(delta>0?1:-1);
+  if (delta>12 && now-state.lastTilt>500) {
+    state.lastTilt=now; state.tiltLocked=true; advancePhoto(1);
   }
 }
 
@@ -187,15 +187,13 @@ $('advanceButton').addEventListener('click', advanceStep);
 $('resetButton').addEventListener('click', () => resetJourney(true));
 $('closeGallery').addEventListener('click', closeGallery);
 $('nextPhoto').addEventListener('click', () => advancePhoto(1));
-$('prevPhoto').addEventListener('click', () => advancePhoto(-1));
 $('replayButton').addEventListener('click', () => { setOverlay($('endOverlay'),false); resetJourney(false); });
 $('finishButton').addEventListener('click', () => setOverlay($('endOverlay'),false));
 $('photoFrame').addEventListener('pointerdown', event => { state.touchX=event.clientX; });
-$('photoFrame').addEventListener('pointerup', event => { if (state.touchX == null) return; const delta=event.clientX-state.touchX; state.touchX=null; if (Math.abs(delta)>42) advancePhoto(delta<0?1:-1); });
+$('photoFrame').addEventListener('pointerup', event => { if (state.touchX == null) return; const delta=event.clientX-state.touchX; state.touchX=null; if (delta < -42) advancePhoto(1); });
 window.addEventListener('resize', updateMap);
 window.addEventListener('keydown', event => {
   if (event.key==='Escape' && $('galleryOverlay').classList.contains('is-open')) closeGallery();
   if (event.key==='ArrowRight' && $('galleryOverlay').classList.contains('is-open')) advancePhoto(1);
-  if (event.key==='ArrowLeft' && $('galleryOverlay').classList.contains('is-open')) advancePhoto(-1);
 });
 updateMap();
